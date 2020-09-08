@@ -16,30 +16,18 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.SurfaceView;
 import android.view.WindowManager;
+
+import androidx.appcompat.app.AppCompatActivity;
 
 import java.util.Collections;
 import java.util.List;
 
-public class MainActivity extends CameraActivity implements CvCameraViewListener2 {
-    private static final String    TAG = "OCVSample::Activity";
-
-    private static final int       VIEW_MODE_RGBA     = 0;
-    private static final int       VIEW_MODE_GRAY     = 1;
-    private static final int       VIEW_MODE_CANNY    = 2;
-    private static final int       VIEW_MODE_FEATURES = 5;
-
-    private int                    mViewMode;
-    private Mat                    mRgba;
-    private Mat                    mIntermediateMat;
-    private Mat                    mGray;
-
-    private MenuItem               mItemPreviewRGBA;
-    private MenuItem               mItemPreviewGray;
-    private MenuItem               mItemPreviewCanny;
-    private MenuItem               mItemPreviewFeatures;
-
+public class MainActivity extends CameraActivity implements CameraBridgeViewBase.CvCameraViewListener2{
+    private static final String    TAG = "MainActivity";
     private CameraBridgeViewBase   mOpenCvCameraView;
+    private Mat mat;
 
     private BaseLoaderCallback  mLoaderCallback = new BaseLoaderCallback(this) {
         @Override
@@ -48,10 +36,6 @@ public class MainActivity extends CameraActivity implements CvCameraViewListener
                 case LoaderCallbackInterface.SUCCESS:
                 {
                     Log.i(TAG, "OpenCV loaded successfully");
-
-                    // Load native library after(!) OpenCV initialization
-                    System.loadLibrary("mixed_sample");
-
                     mOpenCvCameraView.enableView();
                 } break;
                 default:
@@ -62,32 +46,19 @@ public class MainActivity extends CameraActivity implements CvCameraViewListener
         }
     };
 
-    public MainActivity() {
-        Log.i(TAG, "Instantiated new " + this.getClass());
-    }
-
     /** Called when the activity is first created. */
     @Override
     public void onCreate(Bundle savedInstanceState) {
         Log.i(TAG, "called onCreate");
         super.onCreate(savedInstanceState);
+
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         setContentView(R.layout.activity_main);
 
-        mOpenCvCameraView = (CameraBridgeViewBase) findViewById(R.id.tutorial2_activity_surface_view);
-        mOpenCvCameraView.setVisibility(CameraBridgeViewBase.VISIBLE);
+        mOpenCvCameraView = (CameraBridgeViewBase) findViewById(R.id.camera_surface_view);
+        mOpenCvCameraView.setVisibility(SurfaceView.VISIBLE);
         mOpenCvCameraView.setCvCameraViewListener(this);
-    }
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        Log.i(TAG, "called onCreateOptionsMenu");
-        mItemPreviewRGBA = menu.add("Preview RGBA");
-        mItemPreviewGray = menu.add("Preview GRAY");
-        mItemPreviewCanny = menu.add("Canny");
-        mItemPreviewFeatures = menu.add("Find features");
-        return true;
     }
 
     @Override
@@ -111,72 +82,30 @@ public class MainActivity extends CameraActivity implements CvCameraViewListener
         }
     }
 
-    @Override
-    protected List<? extends CameraBridgeViewBase> getCameraViewList() {
-        return Collections.singletonList(mOpenCvCameraView);
-    }
-
     public void onDestroy() {
         super.onDestroy();
         if (mOpenCvCameraView != null)
             mOpenCvCameraView.disableView();
     }
 
+    @Override
+    protected List<? extends CameraBridgeViewBase> getCameraViewList() {
+        return Collections.singletonList(mOpenCvCameraView);
+    }
+
+    @Override
     public void onCameraViewStarted(int width, int height) {
-        mRgba = new Mat(height, width, CvType.CV_8UC4);
-        mIntermediateMat = new Mat(height, width, CvType.CV_8UC4);
-        mGray = new Mat(height, width, CvType.CV_8UC1);
+        mat = new Mat(width, height, CvType.CV_8UC4);
     }
 
+    @Override
     public void onCameraViewStopped() {
-        mRgba.release();
-        mGray.release();
-        mIntermediateMat.release();
+        mat.release();
     }
 
+    @Override
     public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
-        final int viewMode = mViewMode;
-        switch (viewMode) {
-            case VIEW_MODE_GRAY:
-                // input frame has gray scale format
-                Imgproc.cvtColor(inputFrame.gray(), mRgba, Imgproc.COLOR_GRAY2RGBA, 4);
-                break;
-            case VIEW_MODE_RGBA:
-                // input frame has RBGA format
-                mRgba = inputFrame.rgba();
-                break;
-            case VIEW_MODE_CANNY:
-                // input frame has gray scale format
-                mRgba = inputFrame.rgba();
-                Imgproc.Canny(inputFrame.gray(), mIntermediateMat, 80, 100);
-                Imgproc.cvtColor(mIntermediateMat, mRgba, Imgproc.COLOR_GRAY2RGBA, 4);
-                break;
-            case VIEW_MODE_FEATURES:
-                // input frame has RGBA format
-                mRgba = inputFrame.rgba();
-                mGray = inputFrame.gray();
-                FindFeatures(mGray.getNativeObjAddr(), mRgba.getNativeObjAddr());
-                break;
-        }
-
-        return mRgba;
+        mat = inputFrame.rgba();
+        return mat;
     }
-
-    public boolean onOptionsItemSelected(MenuItem item) {
-        Log.i(TAG, "called onOptionsItemSelected; selected item: " + item);
-
-        if (item == mItemPreviewRGBA) {
-            mViewMode = VIEW_MODE_RGBA;
-        } else if (item == mItemPreviewGray) {
-            mViewMode = VIEW_MODE_GRAY;
-        } else if (item == mItemPreviewCanny) {
-            mViewMode = VIEW_MODE_CANNY;
-        } else if (item == mItemPreviewFeatures) {
-            mViewMode = VIEW_MODE_FEATURES;
-        }
-
-        return true;
-    }
-
-    public native void FindFeatures(long matAddrGr, long matAddrRgba);
 }
